@@ -1,0 +1,72 @@
+name: Tests
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - '*'
+    paths-ignore:
+      - '**.md'
+jobs:
+  Linting:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '2.7'
+      - name: Run Install
+        run: |
+          sudo apt-get -yqq install libpq-dev
+          gem update --system --no-document
+          gem install rake
+          gem install bundler
+          bundle install
+      - name: Run Linter (rubocop)
+        run: |
+          bundle exec rubocop --format json -o report.json
+  Testing:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    name: ${{ matrix.ruby }}
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_RUBY_VERSION: 2.7
+      BUNDLE_PATH: vendor/bundle
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby:
+          - 2.7
+          - 3.0
+          - 3.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Setup ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler: 1
+      - name: Update rubygems
+        run: |
+          gem update --system --no-document
+      - name: Restore cache
+        uses: actions/cache@v2
+        with:
+          path: ${{ env.BUNDLE_PATH }}
+          key: ruby-${{ matrix.ruby }}-gems-${{ hashFiles('bigid_ocr.gemspec') }}
+          restore-keys: |
+            ruby-${{ matrix.ruby }}-gems-
+      - name: Prepare environment
+        run: |
+          sudo apt-get -y install libsqlite3-dev libxslt1-dev
+      - name: Install dependencies
+        run: |
+          bundle install
+      - name: Run RSpec
+        run: bundle exec rspec
